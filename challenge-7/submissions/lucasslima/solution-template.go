@@ -65,13 +65,37 @@ func (e *ExceedsLimitError) Error() string {
 // NewBankAccount creates a new bank account with the given parameters.
 // It returns an error if any of the parameters are invalid.
 func NewBankAccount(id, owner string, initialBalance, minBalance float64) (*BankAccount, error) {
-	// Implement account creation with validation
-	return nil, nil
+	if owner == "" || id == "" {
+		return nil, &AccountError{}
+	}
+	if initialBalance < 0 || minBalance < 0 {
+		return nil, &NegativeAmountError{}
+	}
+	if initialBalance < minBalance {
+		return nil, &InsufficientFundsError{}
+	}
+
+	return &BankAccount{
+		ID:         id,
+		Owner:      owner,
+		Balance:    initialBalance,
+		MinBalance: minBalance,
+	}, nil
 }
 
 // Deposit adds the specified amount to the account balance.
 // It returns an error if the amount is invalid or exceeds the transaction limit.
 func (a *BankAccount) Deposit(amount float64) error {
+	if amount < 0 {
+		return &NegativeAmountError{}
+	}
+	if amount > MaxTransactionAmount {
+		return &ExceedsLimitError{}
+	}
+	a.mu.Lock()
+	a.Balance += amount
+	a.mu.Unlock()
+
 	// Implement deposit functionality with proper error handling
 	return nil
 }
@@ -81,6 +105,20 @@ func (a *BankAccount) Deposit(amount float64) error {
 // or would bring the balance below the minimum required balance.
 func (a *BankAccount) Withdraw(amount float64) error {
 	// Implement withdrawal functionality with proper error handling
+	if amount < 0 {
+		return &NegativeAmountError{}
+	}
+	if amount > MaxTransactionAmount {
+		return &ExceedsLimitError{}
+	}
+	a.mu.Lock()
+	if amount > a.Balance-a.MinBalance {
+		a.mu.Unlock()
+		return &InsufficientFundsError{}
+	}
+	a.Balance -= amount
+	a.mu.Unlock()
+
 	return nil
 }
 
@@ -89,5 +127,22 @@ func (a *BankAccount) Withdraw(amount float64) error {
 // or would bring the balance below the minimum required balance.
 func (a *BankAccount) Transfer(amount float64, target *BankAccount) error {
 	// Implement transfer functionality with proper error handling
+	if amount < 0 {
+		return &NegativeAmountError{}
+	}
+	if amount > MaxTransactionAmount {
+		return &ExceedsLimitError{}
+	}
+	a.mu.Lock()
+	if amount > a.Balance-a.MinBalance {
+		a.mu.Unlock()
+		return &InsufficientFundsError{}
+	}
+	target.mu.Lock()
+	a.Balance -= amount
+	target.Balance += amount
+	a.mu.Unlock()
+	target.mu.Unlock()
+
 	return nil
 }
